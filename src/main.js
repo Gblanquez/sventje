@@ -3,9 +3,12 @@ import './scroll/scroll.js'
 import globalLinkHover from './animations/link.js'
 import servicesMaskScroll from './animations/homeHero.js';
 import scrollHintLoop from './animations/scrollLink.js';
-
+import bodyTextReveal from './animations/bodyText.js';
+import titleTextReveal from './animations/titleText.js';
 
 
 servicesMaskScroll();
 globalLinkHover()
 scrollHintLoop()
+bodyTextReveal()
+titleTextReveal()
