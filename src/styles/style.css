@@ -1,0 +1,17 @@
+.hero-section {
+    --pL: 100; /* left edge % (0 = top, 100 = bottom) */
+    --pR: 100; /* right edge % */
+    -webkit-clip-path: polygon(
+      0% 0%,
+      100% 0%,
+      100% calc(var(--pR) * 1%),
+      0% calc(var(--pL) * 1%)
+    );
+    clip-path: polygon(
+      0% 0%,
+      100% 0%,
+      100% calc(var(--pR) * 1%),
+      0% calc(var(--pL) * 1%)
+    );
+    will-change: clip-path;
+  }
