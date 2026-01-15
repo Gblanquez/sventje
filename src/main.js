@@ -7,6 +7,7 @@ import bodyTextReveal from './animations/bodyText.js';
 import titleTextReveal from './animations/titleText.js';
 import globalLinesReveal from './animations/lines.js';
 import globalVerticalLinesReveal from './animations/verticalLines.js';
+import clientsWheel from './animations/clients.js';
 
 servicesMaskScroll();
 globalLinkHover()
@@ -15,3 +16,4 @@ bodyTextReveal()
 titleTextReveal()
 globalLinesReveal()
 globalVerticalLinesReveal()
+clientsWheel()
