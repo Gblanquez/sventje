@@ -4,6 +4,84 @@ import { InertiaPlugin } from "gsap/InertiaPlugin";
 
 gsap.registerPlugin(Draggable, InertiaPlugin);
 
+/**
+ * GSAP helper: horizontalLoop(items, config)
+ * - Moves items with xPercent so it can wrap infinitely without clones.
+ * - We keep it PAUSED (no autoplay). We drive it manually via loop.time(...)
+ */
+function horizontalLoop(items, config = {}) {
+  items = gsap.utils.toArray(items);
+
+  const tl = gsap.timeline({
+    repeat: config.repeat ?? -1,
+    paused: config.paused ?? true,
+    defaults: { ease: "none" },
+    onReverseComplete: () => tl.totalTime(tl.rawTime() + tl.duration() * 100),
+  });
+
+  const length = items.length;
+  const startX = items[0].offsetLeft;
+  const times = new Array(length);
+  const widths = new Array(length);
+  const xPercents = new Array(length);
+
+  const pixelsPerSecond = (config.speed || 1) * 100; // speed=1 => 100px/s
+  const snap = config.snap === false ? (v) => v : gsap.utils.snap(config.snap || 1);
+  const paddingRight = config.paddingRight || 0;
+
+  gsap.set(items, {
+    xPercent: (i, el) => {
+      widths[i] = parseFloat(gsap.getProperty(el, "width", "px"));
+      xPercents[i] = snap(parseFloat(gsap.getProperty(el, "xPercent")) || 0);
+      return xPercents[i];
+    },
+  });
+
+  gsap.set(items, { x: 0 });
+
+  const totalWidth =
+    items[length - 1].offsetLeft +
+    (xPercents[length - 1] / 100) * widths[length - 1] -
+    startX +
+    items[length - 1].offsetWidth +
+    paddingRight;
+
+  for (let i = 0; i < length; i++) {
+    const item = items[i];
+    const curX = (xPercents[i] / 100) * widths[i];
+    const distanceToStart = item.offsetLeft + curX - startX;
+    const distanceToLoop = distanceToStart + widths[i];
+
+    times[i] = distanceToStart / pixelsPerSecond;
+
+    tl.to(
+      item,
+      {
+        xPercent: snap(((curX - distanceToLoop) / widths[i]) * 100),
+        duration: distanceToLoop / pixelsPerSecond,
+      },
+      0
+    ).fromTo(
+      item,
+      {
+        xPercent: snap(((curX - distanceToLoop + totalWidth) / widths[i]) * 100),
+      },
+      {
+        xPercent: xPercents[i],
+        duration: (totalWidth - distanceToLoop) / pixelsPerSecond,
+        immediateRender: false,
+      },
+      distanceToLoop / pixelsPerSecond
+    );
+  }
+
+  tl.times = times;
+  tl.totalWidth = totalWidth;
+  tl.pixelsPerSecond = pixelsPerSecond;
+
+  return tl;
+}
+
 export default function servicesCarousel() {
   const wrapper = document.querySelector(".carrousel-wrapper");
   const list = wrapper?.querySelector(".carrousel-list");
@@ -39,108 +117,37 @@ export default function servicesCarousel() {
   };
 
   // --------------------
-  // build 3 sets (prepend + original + append)
-  // --------------------
-  const clearClones = () => {
-    list.querySelectorAll('[data-clone="true"]').forEach((n) => n.remove());
-  };
-
-  const buildClones = () => {
-    clearClones();
-
-    // IMPORTANT: make sure "originals" refers to ONLY the original DOM nodes (no clones)
-    originals = gsap.utils
-      .toArray(list.querySelectorAll(".carrousel-item"))
-      .filter((el) => el.getAttribute("data-clone") !== "true");
-
-    const prep = originals.map((el) => {
-      const c = el.cloneNode(true);
-      c.setAttribute("data-clone", "true");
-      return c;
-    });
-    const app = originals.map((el) => {
-      const c = el.cloneNode(true);
-      c.setAttribute("data-clone", "true");
-      return c;
-    });
-
-    for (let i = prep.length - 1; i >= 0; i--) list.insertBefore(prep[i], list.firstChild);
-    app.forEach((n) => list.appendChild(n));
-
-    // refresh items list (now includes clones)
-    originals = gsap.utils.toArray(list.querySelectorAll(".carrousel-item"));
-  };
-
-  // --------------------
-  // layout cache per set (to preserve your spacing)
+  // layout cache (single set baseline — keeps your spacing)
   // --------------------
   let allItems = [];
-  let setCount = 0;
-  let perSet = 0;
-
   let baseLeft = [];
   let baseWidth = [];
   let baseCenter = [];
   let gaps = [];
-  let setOffsets = [];
 
-  let trackW = 0;
-  let wrapMin = 0;
-  let wrapMax = 0;
+  // loop + time wrapping
+  let loop = null;
+  let wrapTime = null;
 
   const cacheLayout = () => {
     allItems = gsap.utils.toArray(list.querySelectorAll(".carrousel-item"));
-    perSet = allItems.length / 3;
-    setCount = 3;
 
-    // Reset transforms for clean measurement
-    gsap.set(allItems, { scale: 1, x: 0 });
+    // Reset transforms for clean measurement (important)
+    gsap.set(allItems, { scale: 1, x: 0, xPercent: 0 });
 
-    const midStart = perSet; // set #1
-    const mid = allItems.slice(midStart, midStart + perSet);
-
-    baseLeft = mid.map((el) => el.offsetLeft);
-    baseWidth = mid.map((el) => el.getBoundingClientRect().width);
+    baseLeft = allItems.map((el) => el.offsetLeft);
+    baseWidth = allItems.map((el) => el.getBoundingClientRect().width);
     baseCenter = baseLeft.map((l, i) => l + baseWidth[i] * 0.5);
 
     gaps = [];
-    for (let i = 0; i < perSet - 1; i++) {
+    for (let i = 0; i < allItems.length - 1; i++) {
       const rightEdge = baseLeft[i] + baseWidth[i];
       gaps[i] = baseLeft[i + 1] - rightEdge;
     }
-
-    const setStarts = [0, perSet, perSet * 2];
-    const midStartLeft = allItems[midStart].offsetLeft;
-
-    setOffsets = setStarts.map((startIdx) => {
-      const left = allItems[startIdx].offsetLeft;
-      return left - midStartLeft;
-    });
-
-    trackW = allItems[midStart + perSet].offsetLeft - allItems[midStart].offsetLeft;
-
-    // keep “middle set in play”
-    wrapMin = -2 * trackW;
-    wrapMax = 0;
   };
 
   // --------------------
-  // seam killer: keep state.x living around the middle set
-  // --------------------
-  const normalizeToMiddle = () => {
-    if (!trackW) return;
-
-    // We want to keep state.x in a safe band around [-trackW, 0)
-    // but without a visible snap: we shift by exact trackW increments.
-    // Using a small buffer avoids hitting the seam during fast throws.
-    const buffer = trackW * 0.25;
-
-    while (state.x < wrapMin + buffer) state.x += trackW;
-    while (state.x > wrapMax - buffer) state.x -= trackW;
-  };
-
-  // --------------------
-  // scaling + repack (per set)
+  // scaling + repack (single set)
   // --------------------
   const updateScales = () => {
     const { innerWidth, centerX } = getInner();
@@ -172,46 +179,34 @@ export default function servicesCarousel() {
       else scales[i] = Math.min(scales[i], nonHeroMax);
     }
 
-    for (let s = 0; s < setCount; s++) {
-      const startIdx = s * perSet;
-      const setOffset = setOffsets[s];
+    // repack so spacing stays visually consistent while scaling
+    let targetLeft = baseLeft[0];
 
-      let targetLeft = baseLeft[0] + setOffset;
+    for (let i = 0; i < allItems.length; i++) {
+      const sc = scales[i];
+      const w = baseWidth[i] * sc;
+      const targetCenter = targetLeft + w * 0.5;
 
-      for (let i = 0; i < perSet; i++) {
-        const idx = startIdx + i;
-        const sc = scales[idx];
+      const originalCenter = baseCenter[i];
+      const dx = targetCenter - originalCenter;
 
-        const w = baseWidth[i] * sc;
-        const targetCenter = targetLeft + w * 0.5;
+      gsap.set(allItems[i], { scale: sc, x: dx });
 
-        const originalCenter = baseCenter[i] + setOffset;
-        const dx = targetCenter - originalCenter;
-
-        gsap.set(allItems[idx], { scale: sc, x: dx });
-
-        if (i < perSet - 1) targetLeft = targetLeft + w + gaps[i];
-      }
+      if (i < allItems.length - 1) targetLeft = targetLeft + w + gaps[i];
     }
   };
 
   // --------------------
-  // render (wrap + normalize)
+  // render (drive LOOP via state.x)
   // --------------------
   const state = { x: 0 };
 
-  const wrapX = (x) => {
-    const range = wrapMax - wrapMin;
-    if (!range) return x;
-    let v = (x - wrapMin) % range;
-    if (v < 0) v += range;
-    return v + wrapMin;
-  };
-
   const render = () => {
-    normalizeToMiddle();
-    const x = wrapX(state.x);
-    gsap.set(list, { x });
+    if (loop && wrapTime) {
+      // map pixels -> time, no autoplay (only changes when state.x changes)
+      const t = -state.x / loop.pixelsPerSecond;
+      loop.time(wrapTime(t), false);
+    }
     updateScales();
   };
 
@@ -256,35 +251,62 @@ export default function servicesCarousel() {
   };
 
   // --------------------
-  // init (no “small drag needed”)
+  // init / settle (rebuild loop, no clones)
   // --------------------
   let d = null;
   const proxy = document.createElement("div");
 
+  const killLoop = () => {
+    if (loop) {
+      loop.kill();
+      loop = null;
+      wrapTime = null;
+    }
+  };
+
+  const buildLoop = () => {
+    killLoop();
+
+    // (re)capture items
+    originals = gsap.utils.toArray(list.querySelectorAll(".carrousel-item"));
+    allItems = originals;
+
+    // set perf hints
+    gsap.set(allItems, { transformOrigin: "50% 50%", willChange: "transform" });
+
+    cacheLayout();
+
+    const csList = getComputedStyle(list);
+    const cssGap = num(csList.columnGap) || num(csList.gap) || num(csList.rowGap) || 0;
+
+    loop = horizontalLoop(allItems, {
+      paused: true,     // <-- IMPORTANT: no autoplay
+      repeat: -1,
+      speed: 1,         // only affects pixel->time mapping (drag feel), not autoplay
+      snap: 1,
+      paddingRight: cssGap,
+    });
+
+    wrapTime = gsap.utils.wrap(0, loop.duration());
+
+    // start “neutral”
+    state.x = 0;
+    render();
+    snapToCenter(false);
+  };
+
   const settle = () => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        cacheLayout();
+        buildLoop();
 
-        // start around middle set (this is the “safe” zone)
-        state.x = -trackW;
-        render();
-        snapToCenter(false);
-
+        // second pass (fonts/layout settling)
         requestAnimationFrame(() => {
-          cacheLayout();
-          render();
-          snapToCenter(false);
+          buildLoop();
         });
       });
     });
   };
-
-  gsap.set(list, { x: 0 });
-  buildClones();
-
-  allItems = gsap.utils.toArray(list.querySelectorAll(".carrousel-item"));
-  gsap.set(allItems, { transformOrigin: "50% 50%", willChange: "transform" });
 
   settle();
 
@@ -297,7 +319,7 @@ export default function servicesCarousel() {
   window.addEventListener("resize", onResize);
 
   // --------------------
-  // draggable (infinite) - keep in middle set to prevent seam gaps
+  // draggable (infinite) — unchanged behavior
   // --------------------
   d = Draggable.create(proxy, {
     type: "x",
@@ -315,13 +337,11 @@ export default function servicesCarousel() {
 
     onDrag() {
       state.x = this.startStateX + (this.x - this.startX);
-      normalizeToMiddle();
       render();
     },
 
     onThrowUpdate() {
       state.x = this.startStateX + (this.x - this.startX);
-      normalizeToMiddle();
       render();
     },
 
@@ -342,7 +362,7 @@ export default function servicesCarousel() {
   return () => {
     window.removeEventListener("resize", onResize);
     window.removeEventListener("pointerup", onUp);
-    clearClones();
+    killLoop();
     d.kill();
   };
 }
