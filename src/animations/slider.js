@@ -13,9 +13,14 @@ export default function servicesCarousel() {
   let d = null;
   let bounds = { minX: 0, maxX: 0 };
 
-  // --- knobs (tweak these only) ---
-  const minScale = 0.78; // edge size
-  const falloff = 1.25;  // >1 = more focus in center, 1 = linear
+  // --- knobs ---
+  const minScale = 0.78;   // edge size
+  const maxScale = 1.12;   // hero size
+  const falloff = 1.25;    // >1 = more focus in center
+
+  // Prevent "2 heroes":
+  const nonHeroMax = 1.02; // everyone except hero can never exceed this
+  const heroBoost = 0.04;  // extra pop on hero (added on top of computed)
 
   const num = (v) => {
     const n = parseFloat(v);
@@ -36,31 +41,81 @@ export default function servicesCarousel() {
     return { innerLeft, innerRight, innerWidth, centerX };
   };
 
+  // ---- baseline layout cache (preserve your spacing) ----
+  let baseLeft = [];
+  let baseWidth = [];
+  let baseCenter = [];
+  let gaps = [];
+
+  const cacheLayout = () => {
+    gsap.set(items, { scale: 1, x: 0 });
+
+    baseLeft = items.map((el) => el.offsetLeft);
+    baseWidth = items.map((el) => el.getBoundingClientRect().width);
+    baseCenter = baseLeft.map((l, i) => l + baseWidth[i] * 0.5);
+
+    gaps = [];
+    for (let i = 0; i < items.length - 1; i++) {
+      const rightEdge = baseLeft[i] + baseWidth[i];
+      gaps[i] = baseLeft[i + 1] - rightEdge;
+    }
+  };
+
   const updateScales = () => {
     const { innerWidth, centerX } = getInner();
     const maxDist = innerWidth * 0.5;
 
+    const scales = new Array(items.length);
+    let heroIdx = 0;
+    let heroDist = Infinity;
+
+    // 1) compute scales + find closest to center (hero)
     for (let i = 0; i < items.length; i++) {
       const r = items[i].getBoundingClientRect();
       const itemCenter = r.left + r.width * 0.5;
 
-      // 0 at center -> 1 at edges
-      let t = Math.min(1, Math.abs(itemCenter - centerX) / maxDist);
+      const dist = Math.abs(itemCenter - centerX);
+      if (dist < heroDist) {
+        heroDist = dist;
+        heroIdx = i;
+      }
 
-      // smoothstep (nice)
-      t = t * t * (3 - 2 * t);
-
-      // shape (more focus in center)
+      let t = Math.min(1, dist / maxDist);
+      t = t * t * (3 - 2 * t); // smoothstep
       t = Math.pow(t, falloff);
 
-      const s = 1 - (1 - minScale) * t;
-      gsap.set(items[i], { scale: s });
+      // scale mapped from maxScale (center) -> minScale (edges)
+      scales[i] = maxScale - (maxScale - minScale) * t;
+    }
+
+    // 2) enforce single hero
+    for (let i = 0; i < scales.length; i++) {
+      if (i === heroIdx) {
+        scales[i] = maxScale + heroBoost;
+      } else {
+        scales[i] = Math.min(scales[i], nonHeroMax);
+      }
+    }
+
+    // 3) repack positions with original gaps (this keeps your spacing)
+    let targetLeft = baseLeft[0];
+
+    for (let i = 0; i < items.length; i++) {
+      const w = baseWidth[i] * scales[i];
+      const targetCenter = targetLeft + w * 0.5;
+
+      const dx = targetCenter - baseCenter[i];
+
+      gsap.set(items[i], { scale: scales[i], x: dx });
+
+      if (i < items.length - 1) {
+        targetLeft = targetLeft + w + gaps[i];
+      }
     }
   };
 
   const measureBounds = () => {
-    // IMPORTANT: measure bounds with neutral scale so edge math isn't affected by scaling
-    gsap.set(items, { scale: 1 });
+    gsap.set(items, { scale: 1, x: 0 });
 
     const first = items[0];
     const last = items[items.length - 1];
@@ -87,15 +142,18 @@ export default function servicesCarousel() {
 
     if (d) d.applyBounds(bounds);
 
-    // re-apply scaling after measuring
+    cacheLayout();
     updateScales();
   };
 
-  // --- init ---
+  // init
   gsap.set(items, { transformOrigin: "50% 50%", willChange: "transform" });
 
+  cacheLayout();
   measureBounds();
-  window.addEventListener("resize", measureBounds);
+
+  const onResize = () => measureBounds();
+  window.addEventListener("resize", onResize);
 
   d = Draggable.create(list, {
     type: "x",
@@ -105,7 +163,6 @@ export default function servicesCarousel() {
     dragResistance: 0.08,
     inertiaResistance: 14,
     bounds: () => bounds,
-
     onPress: measureBounds,
     onDrag: updateScales,
     onThrowUpdate: updateScales,
@@ -117,7 +174,7 @@ export default function servicesCarousel() {
   window.addEventListener("pointerup", () => (wrapper.style.cursor = "grab"));
 
   return () => {
-    window.removeEventListener("resize", measureBounds);
+    window.removeEventListener("resize", onResize);
     d.kill();
   };
 }
