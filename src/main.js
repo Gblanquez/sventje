@@ -8,6 +8,7 @@ import titleTextReveal from './animations/titleText.js';
 import globalLinesReveal from './animations/lines.js';
 import globalVerticalLinesReveal from './animations/verticalLines.js';
 import clientsWheel from './animations/clients.js';
+import servicesCarousel from './animations/slider.js';
 
 servicesMaskScroll();
 globalLinkHover()
@@ -17,3 +18,4 @@ titleTextReveal()
 globalLinesReveal()
 globalVerticalLinesReveal()
 // clientsWheel()
+servicesCarousel()
