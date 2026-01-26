@@ -48,4 +48,4 @@ function stopRAF() {
 }
 
 export { lenis, startRAF, stopRAF, setOnScrollUpdate, rafTime }
-startRAF()
+// startRAF()

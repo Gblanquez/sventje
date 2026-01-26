@@ -1,17 +1,20 @@
 import { Renderer } from '@unseenco/taxi';
-import { lenis, startRAF, stopRAF } from '../scroll';
+import { lenis, startRAF, stopRAF } from '../scroll/scroll'
 import gsap from 'gsap'
 
 export default class defaultRender extends Renderer {
-    initialLoad() {
+    initialLoad()
+     {
 
+      startRAF()
 
       }
   onEnter() {
-    
+
+    startRAF()
     console.log('defaultRenderEnter')
 
-    const container = this.wrapper.querySelector('[data-a="wrap"]');
+    const container = this.wrapper
 
     const tl = gsap.timeline(
       {
@@ -51,11 +54,11 @@ export default class defaultRender extends Renderer {
 
   onEnterCompleted() {
 
-    startRAF()
   }
 
   onLeave() {
 
+    stopRAF()
 
   }
 

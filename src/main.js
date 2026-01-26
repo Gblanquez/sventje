@@ -9,6 +9,7 @@ import globalLinesReveal from './animations/lines.js';
 import globalVerticalLinesReveal from './animations/verticalLines.js';
 import clientsWheel from './animations/clients.js';
 import servicesCarousel from './animations/slider.js';
+import taxi from './render/transition.js';
 
 servicesMaskScroll();
 globalLinkHover()
@@ -19,3 +20,4 @@ globalLinesReveal()
 globalVerticalLinesReveal()
 // clientsWheel()
 servicesCarousel()
+

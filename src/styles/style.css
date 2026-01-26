@@ -16,4 +16,47 @@
     will-change: clip-path;
   }
 
+
+
+  .transition-block{
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    pointer-events: none;
+    opacity: 0;
+    will-change: clip-path;
+    --pL: 100;
+    --pR: 100;
+  }
   
+  /* REVEAL mode: visible from moving top edge DOWN to bottom (fills upward) */
+  .transition-block[data-mode="reveal"]{
+    -webkit-clip-path: polygon(
+      0% calc(var(--pL) * 1%),
+      100% calc(var(--pR) * 1%),
+      100% 100%,
+      0% 100%
+    );
+    clip-path: polygon(
+      0% calc(var(--pL) * 1%),
+      100% calc(var(--pR) * 1%),
+      100% 100%,
+      0% 100%
+    );
+  }
+  
+  /* HIDE mode: visible from TOP down to moving bottom edge (wipes upward off) */
+  .transition-block[data-mode="hide"]{
+    -webkit-clip-path: polygon(
+      0% 0%,
+      100% 0%,
+      100% calc(var(--pR) * 1%),
+      0% calc(var(--pL) * 1%)
+    );
+    clip-path: polygon(
+      0% 0%,
+      100% 0%,
+      100% calc(var(--pR) * 1%),
+      0% calc(var(--pL) * 1%)
+    );
+  }
