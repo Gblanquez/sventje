@@ -25,7 +25,7 @@ function horizontalLoop(items, config = {}) {
   const widths = new Array(length);
   const xPercents = new Array(length);
 
-  const pixelsPerSecond = (config.speed || 1) * 100; // speed=1 => 100px/s
+  const pixelsPerSecond = (config.speed || 1) * 100;
   const snap = config.snap === false ? (v) => v : gsap.utils.snap(config.snap || 1);
   const paddingRight = config.paddingRight || 0;
 
@@ -85,17 +85,8 @@ function horizontalLoop(items, config = {}) {
 export default function servicesCarousel() {
   const wrapper = document.querySelector(".carrousel-wrapper");
   const list = wrapper?.querySelector(".carrousel-list");
-  let originals = list ? gsap.utils.toArray(list.querySelectorAll(".carrousel-item")) : [];
-  if (!wrapper || !list || !originals.length) return;
-
-  // --------------------
-  // knobs (same intent)
-  // --------------------
-  const minScale = 0.78;   // edge size
-  const maxScale = 1.12;   // hero size
-  const falloff = 1.25;    // >1 = more focus in center
-  const nonHeroMax = 1.02; // everyone except hero can never exceed this
-  const heroBoost = 0.04;  // extra pop on hero
+  let items = list ? gsap.utils.toArray(list.querySelectorAll(".carrousel-item")) : [];
+  if (!wrapper || !list || !items.length) return;
 
   const num = (v) => {
     const n = parseFloat(v);
@@ -116,123 +107,48 @@ export default function servicesCarousel() {
     return { innerLeft, innerRight, innerWidth, centerX };
   };
 
-  // --------------------
-  // layout cache (single set baseline — keeps your spacing)
-  // --------------------
-  let allItems = [];
-  let baseLeft = [];
-  let baseWidth = [];
-  let baseCenter = [];
-  let gaps = [];
-
   // loop + time wrapping
   let loop = null;
   let wrapTime = null;
 
-  const cacheLayout = () => {
-    allItems = gsap.utils.toArray(list.querySelectorAll(".carrousel-item"));
-
-    // Reset transforms for clean measurement (important)
-    gsap.set(allItems, { scale: 1, x: 0, xPercent: 0 });
-
-    baseLeft = allItems.map((el) => el.offsetLeft);
-    baseWidth = allItems.map((el) => el.getBoundingClientRect().width);
-    baseCenter = baseLeft.map((l, i) => l + baseWidth[i] * 0.5);
-
-    gaps = [];
-    for (let i = 0; i < allItems.length - 1; i++) {
-      const rightEdge = baseLeft[i] + baseWidth[i];
-      gaps[i] = baseLeft[i + 1] - rightEdge;
-    }
-  };
-
-  // --------------------
-  // scaling + repack (single set)
-  // --------------------
-  const updateScales = () => {
-    const { innerWidth, centerX } = getInner();
-    const maxDist = innerWidth * 0.5;
-
-    const scales = new Array(allItems.length);
-    let heroIdx = 0;
-    let heroDist = Infinity;
-
-    for (let i = 0; i < allItems.length; i++) {
-      const r = allItems[i].getBoundingClientRect();
-      const itemCenter = r.left + r.width * 0.5;
-
-      const dist = Math.abs(itemCenter - centerX);
-      if (dist < heroDist) {
-        heroDist = dist;
-        heroIdx = i;
-      }
-
-      let t = Math.min(1, dist / maxDist);
-      t = t * t * (3 - 2 * t);
-      t = Math.pow(t, falloff);
-
-      scales[i] = maxScale - (maxScale - minScale) * t;
-    }
-
-    for (let i = 0; i < scales.length; i++) {
-      if (i === heroIdx) scales[i] = maxScale + heroBoost;
-      else scales[i] = Math.min(scales[i], nonHeroMax);
-    }
-
-    // repack so spacing stays visually consistent while scaling
-    let targetLeft = baseLeft[0];
-
-    for (let i = 0; i < allItems.length; i++) {
-      const sc = scales[i];
-      const w = baseWidth[i] * sc;
-      const targetCenter = targetLeft + w * 0.5;
-
-      const originalCenter = baseCenter[i];
-      const dx = targetCenter - originalCenter;
-
-      gsap.set(allItems[i], { scale: sc, x: dx });
-
-      if (i < allItems.length - 1) targetLeft = targetLeft + w + gaps[i];
-    }
-  };
-
-  // --------------------
-  // render (drive LOOP via state.x)
-  // --------------------
+  // drive loop by pixels
   const state = { x: 0 };
 
-  const render = () => {
-    if (loop && wrapTime) {
-      // map pixels -> time, no autoplay (only changes when state.x changes)
-      const t = -state.x / loop.pixelsPerSecond;
-      loop.time(wrapTime(t), false);
+  const killLoop = () => {
+    if (loop) {
+      loop.kill();
+      loop = null;
+      wrapTime = null;
     }
-    updateScales();
   };
 
-  // --------------------
-  // snap so ONE item is centered (hero)
-  // --------------------
+  const render = () => {
+    if (!loop || !wrapTime) return;
+    const t = -state.x / loop.pixelsPerSecond;
+    loop.time(wrapTime(t), false);
+  };
+
+  // snap so the closest item is centered
   const snapToCenter = (animate = true) => {
     const { centerX } = getInner();
 
-    let heroIdx = 0;
-    let heroDist = Infinity;
+    let closestIdx = 0;
+    let best = Infinity;
 
-    for (let i = 0; i < allItems.length; i++) {
-      const r = allItems[i].getBoundingClientRect();
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i].getBoundingClientRect();
       const c = r.left + r.width * 0.5;
-      const dist = Math.abs(c - centerX);
-      if (dist < heroDist) {
-        heroDist = dist;
-        heroIdx = i;
+      const d = Math.abs(c - centerX);
+      if (d < best) {
+        best = d;
+        closestIdx = i;
       }
     }
 
-    const heroRect = allItems[heroIdx].getBoundingClientRect();
-    const heroCenter = heroRect.left + heroRect.width * 0.5;
+    const r = items[closestIdx].getBoundingClientRect();
+    const itemCenter = r.left + r.width * 0.5;
 
-    const delta = centerX - heroCenter;
+    const delta = centerX - itemCenter;
     const target = state.x + delta;
 
     if (!animate) {
@@ -250,46 +166,29 @@ export default function servicesCarousel() {
     });
   };
 
-  // --------------------
-  // init / settle (rebuild loop, no clones)
-  // --------------------
-  let d = null;
-  const proxy = document.createElement("div");
-
-  const killLoop = () => {
-    if (loop) {
-      loop.kill();
-      loop = null;
-      wrapTime = null;
-    }
-  };
-
   const buildLoop = () => {
     killLoop();
 
-    // (re)capture items
-    originals = gsap.utils.toArray(list.querySelectorAll(".carrousel-item"));
-    allItems = originals;
+    // re-capture items (in case Webflow CMS updates)
+    items = gsap.utils.toArray(list.querySelectorAll(".carrousel-item"));
+    if (!items.length) return;
 
-    // set perf hints
-    gsap.set(allItems, { transformOrigin: "50% 50%", willChange: "transform" });
-
-    cacheLayout();
+    // IMPORTANT: do not touch scale/x (keep layout stable)
+    gsap.set(items, { x: 0, xPercent: 0, willChange: "transform" });
 
     const csList = getComputedStyle(list);
     const cssGap = num(csList.columnGap) || num(csList.gap) || num(csList.rowGap) || 0;
 
-    loop = horizontalLoop(allItems, {
-      paused: true,     // <-- IMPORTANT: no autoplay
+    loop = horizontalLoop(items, {
+      paused: true,
       repeat: -1,
-      speed: 1,         // only affects pixel->time mapping (drag feel), not autoplay
+      speed: 1,
       snap: 1,
       paddingRight: cssGap,
     });
 
     wrapTime = gsap.utils.wrap(0, loop.duration());
 
-    // start “neutral”
     state.x = 0;
     render();
     snapToCenter(false);
@@ -299,29 +198,22 @@ export default function servicesCarousel() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         buildLoop();
-
-        // second pass (fonts/layout settling)
-        requestAnimationFrame(() => {
-          buildLoop();
-        });
+        requestAnimationFrame(buildLoop); // second pass for layout/fonts settling
       });
     });
   };
 
   settle();
-
-  if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(settle);
-  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(settle);
   window.addEventListener("load", settle, { once: true });
 
   const onResize = () => settle();
   window.addEventListener("resize", onResize);
 
-  // --------------------
-  // draggable (infinite) — unchanged behavior
-  // --------------------
-  d = Draggable.create(proxy, {
+  // draggable (infinite)
+  const proxy = document.createElement("div");
+
+  const d = Draggable.create(proxy, {
     type: "x",
     trigger: wrapper,
     inertia: true,
