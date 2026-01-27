@@ -18,6 +18,6 @@ bodyTextReveal()
 titleTextReveal()
 globalLinesReveal()
 globalVerticalLinesReveal()
-// clientsWheel()
+clientsWheel()
 servicesCarousel()
 

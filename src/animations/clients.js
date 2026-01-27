@@ -3,135 +3,252 @@ import { InertiaPlugin } from "gsap/InertiaPlugin";
 import { Draggable } from "gsap/Draggable";
 gsap.registerPlugin(Draggable, InertiaPlugin);
 
+function verticalLoop(items, config = {}) {
+  items = gsap.utils.toArray(items);
+
+  const tl = gsap.timeline({
+    repeat: config.repeat ?? -1,
+    paused: config.paused ?? true,
+    defaults: { ease: "none" },
+    onReverseComplete: () => tl.totalTime(tl.rawTime() + tl.duration() * 100),
+  });
+
+  const length = items.length;
+  const startY = items[0].offsetTop;
+  const times = new Array(length);
+  const heights = new Array(length);
+  const yPercents = new Array(length);
+
+  const pixelsPerSecond = (config.speed || 1) * 100;
+  const snap = config.snap === false ? (v) => v : gsap.utils.snap(config.snap || 1);
+  const paddingBottom = config.paddingBottom || 0;
+
+  gsap.set(items, {
+    yPercent: (i, el) => {
+      heights[i] = parseFloat(gsap.getProperty(el, "height", "px"));
+      yPercents[i] = snap(parseFloat(gsap.getProperty(el, "yPercent")) || 0);
+      return yPercents[i];
+    },
+  });
+
+  gsap.set(items, { y: 0 });
+
+  const totalHeight =
+    items[length - 1].offsetTop +
+    (yPercents[length - 1] / 100) * heights[length - 1] -
+    startY +
+    items[length - 1].offsetHeight +
+    paddingBottom;
+
+  for (let i = 0; i < length; i++) {
+    const item = items[i];
+    const curY = (yPercents[i] / 100) * heights[i];
+    const distanceToStart = item.offsetTop + curY - startY;
+    const distanceToLoop = distanceToStart + heights[i];
+
+    times[i] = distanceToStart / pixelsPerSecond;
+
+    tl.to(
+      item,
+      {
+        yPercent: snap(((curY - distanceToLoop) / heights[i]) * 100),
+        duration: distanceToLoop / pixelsPerSecond,
+      },
+      0
+    ).fromTo(
+      item,
+      {
+        yPercent: snap(((curY - distanceToLoop + totalHeight) / heights[i]) * 100),
+      },
+      {
+        yPercent: yPercents[i],
+        duration: (totalHeight - distanceToLoop) / pixelsPerSecond,
+        immediateRender: false,
+      },
+      distanceToLoop / pixelsPerSecond
+    );
+  }
+
+  tl.times = times;
+  tl.totalHeight = totalHeight;
+  tl.pixelsPerSecond = pixelsPerSecond;
+
+  return tl;
+}
+
 export default function clientsWheel() {
   const viewport = document.querySelector('[data-a="client-wrap"]');
   const track = viewport?.querySelector('[data-a="client-track"]');
-  const items = track ? gsap.utils.toArray(track.querySelectorAll('[data-a="clients-item"]')) : [];
+  let items = track ? gsap.utils.toArray(track.querySelectorAll('[data-a="clients-item"]')) : [];
   if (!viewport || !track || !items.length) return;
 
   const imageItems = gsap.utils.toArray(document.querySelectorAll('[data-a="client-img-item"]'));
   const arrow = document.querySelector('[data-a="client-arrow"]');
 
-  const state = { pos: 0, dragging: false };
+  // NEW: counter element
+  const counterEl = document.querySelector('[data-a="client-c-number"]');
 
-  let itemH = 0;
-  let totalH = 0;
-  let minPos = 0;
-  let maxPos = 0;
+  const state = { y: 0 };
 
-  const setY = items.map((el) => gsap.quickSetter(el, "y", "px"));
+  let loop = null;
+  let wrapTime = null;
+
   const setClientOpacity = items.map((el) => gsap.quickSetter(el, "opacity"));
-
-  const clamp = gsap.utils.clamp;
-
-  const measure = () => {
-    const r0 = items[0].getBoundingClientRect();
-    itemH = Math.max(1, r0.height);
-    totalH = itemH * items.length;
-
-    const vh = viewport.getBoundingClientRect().height;
-
-    // We lay out items like:
-    // y = i*itemH + pos; then we subtract itemH (bias) like before.
-    // We'll allow pos so the list can be moved up/down but NOT wrapped.
-    // maxPos = 0 (top-ish), minPos negative (scroll down the list).
-    maxPos = 0;
-
-    // total scrollable distance:
-    const scrollable = Math.max(0, totalH - vh);
-
-    // clamp range. little bias to match our -itemH shift so you can reach last item nicely.
-    minPos = -(scrollable + itemH);
-  };
 
   const getSelectY = () => {
     const vr = viewport.getBoundingClientRect();
     if (arrow) {
       const ar = arrow.getBoundingClientRect();
-      return ar.top + ar.height * 0.5 - vr.top; // arrow center, viewport-local
+      return ar.top + ar.height * 0.5 - vr.top;
     }
     return vr.height * 0.5;
   };
 
   let activeIndex = -1;
 
+  // NEW: format helper (01, 02, 03...)
+  const formatIndex = (i) => String(i + 1).padStart(2, "0");
+
   const setActive = (idx) => {
     if (idx === activeIndex) return;
     activeIndex = idx;
 
-    // Clients: active 1, inactive 0.4
     for (let i = 0; i < items.length; i++) {
       setClientOpacity[i](i === idx ? 1 : 0.4);
     }
 
-    // Images: active 1, inactive 0 (by index)
     if (imageItems.length) {
       for (let i = 0; i < imageItems.length; i++) {
         gsap.set(imageItems[i], { opacity: i === idx ? 1 : 0 });
       }
     }
 
-    // Services: nested CMS inside each client item
     for (let i = 0; i < items.length; i++) {
       const services = items[i].querySelectorAll('[data-a="client-service-item"]');
       if (!services.length) continue;
       gsap.set(services, { opacity: i === idx ? 1 : 0 });
     }
+
+    // NEW: update the number
+    if (counterEl) counterEl.textContent = formatIndex(idx);
   };
 
-  const render = () => {
-    // Clamp (non-infinite)
-    state.pos = clamp(minPos, maxPos, state.pos);
-
+  const findClosestIndex = () => {
     const vr = viewport.getBoundingClientRect();
-    const tr = track.getBoundingClientRect();
-
-    // Track offset inside viewport (important!)
-    const trackOffsetY = tr.top - vr.top;
-
     const selectY = getSelectY();
 
     let bestIdx = 0;
     let bestDist = Infinity;
 
     for (let i = 0; i < items.length; i++) {
-      // Your original “bias” so first item starts slightly above
-      const y = i * itemH + state.pos - itemH;
-
-      const itemCenterInViewport = trackOffsetY + (y + itemH * 0.5);
-      const d = Math.abs(itemCenterInViewport - selectY);
-
+      const r = items[i].getBoundingClientRect();
+      const centerInViewport = (r.top - vr.top) + r.height * 0.5;
+      const d = Math.abs(centerInViewport - selectY);
       if (d < bestDist) {
         bestDist = d;
         bestIdx = i;
       }
-
-      setY[i](y);
     }
 
-    setActive(bestIdx);
+    return bestIdx;
   };
 
-  // Init
-  measure();
+  const render = () => {
+    if (loop && wrapTime) {
+      const t = -state.y / loop.pixelsPerSecond;
+      loop.time(wrapTime(t), false);
+    }
+    setActive(findClosestIndex());
+  };
 
-  gsap.set(items, { opacity: 0.4, willChange: "transform,opacity" });
-  if (imageItems.length) gsap.set(imageItems, { opacity: 0, willChange: "opacity" });
+  const snapToSelect = (animate = true) => {
+    const vr = viewport.getBoundingClientRect();
+    const selectY = getSelectY();
+    const idx = findClosestIndex();
 
-  items.forEach((el) => {
-    const services = el.querySelectorAll('[data-a="client-service-item"]');
-    if (services.length) gsap.set(services, { opacity: 0, willChange: "opacity" });
-  });
+    const r = items[idx].getBoundingClientRect();
+    const centerInViewport = (r.top - vr.top) + r.height * 0.5;
 
-  render();
+    const delta = selectY - centerInViewport;
+    const target = state.y + delta;
 
-  const onResize = () => {
-    measure();
+    if (!animate) {
+      state.y = target;
+      render();
+      return;
+    }
+
+    gsap.to(state, {
+      y: target,
+      duration: 0.35,
+      ease: "expo.out",
+      onUpdate: render,
+      onComplete: render,
+    });
+  };
+
+  const killLoop = () => {
+    if (loop) {
+      loop.kill();
+      loop = null;
+      wrapTime = null;
+    }
+  };
+
+  const buildLoop = () => {
+    killLoop();
+
+    items = gsap.utils.toArray(track.querySelectorAll('[data-a="clients-item"]'));
+    if (!items.length) return;
+
+    gsap.set(items, { y: 0, yPercent: 0, willChange: "transform,opacity" });
+
+    if (imageItems.length) gsap.set(imageItems, { opacity: 0, willChange: "opacity" });
+    items.forEach((el) => {
+      const services = el.querySelectorAll('[data-a="client-service-item"]');
+      if (services.length) gsap.set(services, { opacity: 0, willChange: "opacity" });
+    });
+
+    const csTrack = getComputedStyle(track);
+    const cssGap =
+      parseFloat(csTrack.rowGap) ||
+      parseFloat(csTrack.gap) ||
+      parseFloat(csTrack.columnGap) ||
+      0;
+
+    loop = verticalLoop(items, {
+      paused: true,
+      repeat: -1,
+      speed: 1,
+      snap: 1,
+      paddingBottom: cssGap,
+    });
+
+    wrapTime = gsap.utils.wrap(0, loop.duration());
+
+    state.y = 0;
     render();
+    snapToSelect(false);
   };
+
+  const settle = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        buildLoop();
+        requestAnimationFrame(buildLoop);
+      });
+    });
+  };
+
+  gsap.set(items, { opacity: 0.4 });
+  settle();
+
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(settle);
+  window.addEventListener("load", settle, { once: true });
+
+  const onResize = () => settle();
   window.addEventListener("resize", onResize);
 
-  // Draggable proxy (does NOT move your real DOM; avoids layout shifts)
   const proxy = document.createElement("div");
 
   const d = Draggable.create(proxy, {
@@ -143,39 +260,39 @@ export default function clientsWheel() {
     inertiaResistance: 14,
 
     onPress() {
-      state.dragging = true;
+      gsap.killTweensOf(state);
       this.startY = this.y;
-      this.startPos = state.pos;
-      gsap.killTweensOf(proxy);
+      this.startStateY = state.y;
     },
 
     onDrag() {
-      const dy = this.y - this.startY;
-      state.pos = this.startPos + dy;
+      state.y = this.startStateY + (this.y - this.startY);
       render();
     },
 
     onThrowUpdate() {
-      const dy = this.y - this.startY;
-      state.pos = this.startPos + dy;
+      state.y = this.startStateY + (this.y - this.startY);
       render();
     },
 
     onThrowComplete() {
-      state.dragging = false;
+      snapToSelect(true);
     },
 
     onRelease() {
-      if (!this.tween) state.dragging = false;
+      if (!this.tween) snapToSelect(true);
     },
   })[0];
 
   viewport.style.cursor = "grab";
   viewport.addEventListener("pointerdown", () => (viewport.style.cursor = "grabbing"));
-  window.addEventListener("pointerup", () => (viewport.style.cursor = "grab"));
+  const onUp = () => (viewport.style.cursor = "grab");
+  window.addEventListener("pointerup", onUp);
 
   return () => {
     window.removeEventListener("resize", onResize);
+    window.removeEventListener("pointerup", onUp);
+    killLoop();
     d.kill();
   };
 }

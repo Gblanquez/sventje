@@ -60,3 +60,34 @@
       0% calc(var(--pL) * 1%)
     );
   }
+
+
+  .cl-txt-wrap{
+    /* position: relative; */
+    /* overflow: hidden;  */
+    
+    /* adjust these */
+    --fade: 64px;      /* height of the fade at top/bottom */
+    --edge: 0.0;       /* 0 = fully transparent at edge */
+    --mid: 1;          /* 1 = fully visible in the middle */
+    
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      rgba(0,0,0,var(--edge)) 0%,
+      rgba(0,0,0,var(--mid)) var(--fade),
+      rgba(0,0,0,var(--mid)) calc(100% - var(--fade)),
+      rgba(0,0,0,var(--edge)) 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      rgba(0,0,0,var(--edge)) 0%,
+      rgba(0,0,0,var(--mid)) var(--fade),
+      rgba(0,0,0,var(--mid)) calc(100% - var(--fade)),
+      rgba(0,0,0,var(--edge)) 100%
+    );
+  
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 100% 100%;
+    mask-size: 100% 100%;
+  }
