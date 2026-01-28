@@ -84,8 +84,6 @@ export default function clientsWheel() {
 
   const imageItems = gsap.utils.toArray(document.querySelectorAll('[data-a="client-img-item"]'));
   const arrow = document.querySelector('[data-a="client-arrow"]');
-
-  // NEW: counter element
   const counterEl = document.querySelector('[data-a="client-c-number"]');
 
   const state = { y: 0 };
@@ -105,8 +103,6 @@ export default function clientsWheel() {
   };
 
   let activeIndex = -1;
-
-  // NEW: format helper (01, 02, 03...)
   const formatIndex = (i) => String(i + 1).padStart(2, "0");
 
   const setActive = (idx) => {
@@ -129,8 +125,13 @@ export default function clientsWheel() {
       gsap.set(services, { opacity: i === idx ? 1 : 0 });
     }
 
-    // NEW: update the number
     if (counterEl) counterEl.textContent = formatIndex(idx);
+  };
+
+  // NEW: force activation even if activeIndex guard would skip
+  const forceActive = (idx) => {
+    activeIndex = -1;
+    setActive(idx);
   };
 
   const findClosestIndex = () => {
@@ -229,6 +230,10 @@ export default function clientsWheel() {
     state.y = 0;
     render();
     snapToSelect(false);
+
+    // NEW: force initial UI state (image/services) immediately on load
+    const idx = findClosestIndex();
+    forceActive(idx);
   };
 
   const settle = () => {

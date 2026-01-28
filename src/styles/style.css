@@ -63,11 +63,9 @@
 
 
   .cl-txt-wrap{
-    /* position: relative; */
-    /* overflow: hidden;  */
     
     /* adjust these */
-    --fade: 64px;      /* height of the fade at top/bottom */
+    --fade: 120px;      /* height of the fade at top/bottom */
     --edge: 0.0;       /* 0 = fully transparent at edge */
     --mid: 1;          /* 1 = fully visible in the middle */
     
