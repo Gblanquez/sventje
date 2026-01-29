@@ -86,6 +86,7 @@ export default function servicesCarousel() {
   const wrapper = document.querySelector(".carrousel-wrapper");
   const list = wrapper?.querySelector(".carrousel-list");
   let items = list ? gsap.utils.toArray(list.querySelectorAll(".carrousel-item")) : [];
+  let scaleTargets = items.map((item) => item.querySelector(".box-content") || item);
   if (!wrapper || !list || !items.length) return;
 
   const num = (v) => {
@@ -122,10 +123,30 @@ export default function servicesCarousel() {
     }
   };
 
+  const scaleItems = () => {
+    const { centerX, innerWidth } = getInner();
+    const maxScale = 1.15;
+    const minScale = 0.9;
+    const half = Math.max(1, innerWidth * 0.5);
+
+    for (let i = 0; i < items.length; i++) {
+      const r = items[i].getBoundingClientRect();
+      const c = r.left + r.width * 0.5;
+      const d = Math.min(1, Math.abs(c - centerX) / half);
+      const s = maxScale - (maxScale - minScale) * d;
+      gsap.set(scaleTargets[i], {
+        scaleX: 1,
+        scaleY: s,
+        transformOrigin: "center center",
+      });
+    }
+  };
+
   const render = () => {
     if (!loop || !wrapTime) return;
     const t = -state.x / loop.pixelsPerSecond;
     loop.time(wrapTime(t), false);
+    scaleItems();
   };
 
   // snap so the closest item is centered
@@ -172,9 +193,11 @@ export default function servicesCarousel() {
     // re-capture items (in case Webflow CMS updates)
     items = gsap.utils.toArray(list.querySelectorAll(".carrousel-item"));
     if (!items.length) return;
+    scaleTargets = items.map((item) => item.querySelector(".box-content") || item);
 
     // IMPORTANT: do not touch scale/x (keep layout stable)
     gsap.set(items, { x: 0, xPercent: 0, willChange: "transform" });
+    gsap.set(scaleTargets, { willChange: "transform" });
 
     const csList = getComputedStyle(list);
     const cssGap = num(csList.columnGap) || num(csList.gap) || num(csList.rowGap) || 0;
