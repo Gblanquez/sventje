@@ -4,11 +4,7 @@ import { InertiaPlugin } from "gsap/InertiaPlugin";
 
 gsap.registerPlugin(Draggable, InertiaPlugin);
 
-/**
- * GSAP helper: horizontalLoop(items, config)
- * - Moves items with xPercent so it can wrap infinitely without clones.
- * - We keep it PAUSED (no autoplay). We drive it manually via loop.time(...)
- */
+
 function horizontalLoop(items, config = {}) {
   items = gsap.utils.toArray(items);
 
