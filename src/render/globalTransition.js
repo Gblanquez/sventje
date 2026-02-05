@@ -14,7 +14,7 @@ export default class globalTransition extends Transition {
   animateMask(overlay, options = {}) {
     const {
       mode = "reveal",
-      duration = 0.85,
+      duration = 0.5,
       lead = 8,
       squareAt = 0.18,
       done,
@@ -78,7 +78,7 @@ export default class globalTransition extends Transition {
 
     this.animateMask(overlay, {
       mode: "reveal",
-      duration: 0.8,
+      duration: 0.5,
       lead: 8,
       squareAt: 0.22,
       done: () => {
@@ -102,7 +102,7 @@ export default class globalTransition extends Transition {
 
     this.animateMask(overlay, {
       mode: "hide",
-      duration: 0.8,
+      duration: 0.5,
       lead: 8,
       squareAt: 0.22,
       done: () => {
